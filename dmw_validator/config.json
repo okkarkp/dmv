@@ -1,0 +1,32 @@
+{
+  "models": {
+    "tiny": "models/tiny-llama.Q4_K_M.gguf",
+    "light": "models/llama-3.2-3b-instruct-q4_k_m.gguf"
+  },
+  "default_model": "light",
+
+  "critical_columns": [
+    "Target Table Name",
+    "Target Field Name",
+    "Source Table Name",
+    "Source Field Name",
+    "Transformation Logic",
+    "Business Rule",
+    "Comments"
+  ],
+
+  "prompt": {
+    "review_focus": "Evaluate whether each transformation logic correctly normalizes, trims, casts, or applies business rules. Only flag syntax issues if parentheses or quotes are actually unbalanced. If expression is valid, respond with 'Valid'."
+  },
+
+  "prompt_profiles": {
+    "business": "Comment on business rule clarity, field naming consistency, and logic alignment with policy intent.",
+    "technical": "Assess data type consistency, join logic, and performance considerations.",
+    "strict": "Be concise but critical; highlight incorrect SQL structure or missing logic."
+  },
+
+  "enable_ai_summary": true,
+  "enable_ai_logic_check": true,
+  "enable_ai_sql_generation": true,
+  "ddl_min_fields_threshold": 2
+}

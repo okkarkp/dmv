@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DMW Validation Portal</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    .box { background: #f5f5f5; padding: 20px; border-radius: 6px; width: 400px; }
+  </style>
+</head>
+<body>
+  <h2>DMW Validation Upload</h2>
+  <form class="box" action="/upload" method="post" enctype="multipart/form-data">
+    <label>Data Mapping Workbook (XLSX)</label><br/>
+    <input type="file" name="dmw_xlsx" required><br/><br/>
+    <label>Target Schema (SQL)</label><br/>
+    <input type="file" name="ddl_sql" required><br/><br/>
+    <label>Frozen Baseline (optional XLSX)</label><br/>
+    <input type="file" name="frozen_xlsx"><br/><br/>
+    <button type="submit">Run Validation</button>
+  </form>
+</body>
+</html>

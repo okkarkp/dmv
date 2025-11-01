@@ -1,0 +1,6 @@
+ai:
+  enabled: false          # turn on only when you want suggestions
+  mode: embedded
+  model_path: /opt/oss-migrate/llm-planner/models/tiny-llama.Q4_K_M.gguf
+  n_threads: 4
+  n_ctx: 2048

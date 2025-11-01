@@ -1,0 +1,19 @@
+{
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8085
+  },
+  "ai": {
+    "enabled": true,
+    "mode": "local",
+    "ai_model": "Phi-4-mini-instruct-Q3_K_S.gguf",
+    "ai_model_path": "/app/models/Phi-4-mini-instruct-Q3_K_S.gguf",
+    "ai_host": "127.0.0.1",
+    "ai_port": 8081
+  },
+  "paths": {
+    "uploads": "/app/uploads",
+    "outputs": "/app/outputs",
+    "logs": "/app/logs"
+  }
+}

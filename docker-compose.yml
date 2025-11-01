@@ -1,0 +1,28 @@
+version: "3.9"
+services:
+  dmw-validator:
+    build: .
+    container_name: dmw-validator
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      - phi4-ai
+  phi4-ai:
+    image: ghcr.io/ggerganov/llama.cpp:latest
+    container_name: phi4-ai
+    command: >
+      /app/llama-server
+      -m /models/Phi-4-mini-instruct-Q4_K_M.gguf
+      --ctx-size 2048
+      --threads 8
+      --port 8080
+      --host 0.0.0.0
+    volumes:
+      - ./models:/models
+    ports:
+      - "8080:8080"

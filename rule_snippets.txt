@@ -1,0 +1,5 @@
+Map `name` to `full_name` using string concat
+Convert `dob` to `birth_date` with DATE format YYYY-MM-DD
+Check nulls in `id` and `dob` fields
+Ensure `id` is unique in both source and target
+Compare row counts between source and target

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dmw-validator"
+version = "0.1.0"
+description = "Offline AI-powered DMW validation tool"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+  { name="Your Name", email="your.email@example.com" }
+]
+dependencies = [
+  "pandas",
+  "openpyxl",
+  "llama-cpp-python"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dmw_validator*"]
+
+[tool.setuptools.package-data]
+dmw_validator = ["config.json", "templates/*.html", "templates/*.css", "templates/*.js"]
+
+[project.scripts]
+dmw-validator = "dmw_validator.cli:main"

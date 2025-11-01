@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Validation Result</title>
+  <style>
+    body { font-family: Arial; margin: 40px; }
+    pre { background: #f7f7f7; padding: 10px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h2>Validation Completed</h2>
+  <p>Job ID: {{ job_id }}</p>
+
+  <h3>Available Downloads:</h3>
+  <ul>
+    {% for f in links %}
+      <li><a href="/download/{{ job_id }}/{{ f }}" target="_blank">{{ f }}</a></li>
+    {% endfor %}
+  </ul>
+
+  <h3>Console Output</h3>
+  <pre>{{ stdout }}</pre>
+
+  {% if stderr %}
+  <h3>Errors / Warnings</h3>
+  <pre style="color:red;">{{ stderr }}</pre>
+  {% endif %}
+
+  <p><a href="/">← Back</a></p>
+</body>
+</html>

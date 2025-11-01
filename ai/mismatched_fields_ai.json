@@ -1,0 +1,152 @@
+[
+  {
+    "table": "RefEntity",
+    "field": "TaxCode1",
+    "data": {
+      "target table name": "RefEntity",
+      "target field name": "TaxCode1",
+      "source table name": "SrcTaxMaster",
+      "source field name": "CustID",
+      "transformation logic": "LOWER(TRIM(SrcTaxMaster.CustID))",
+      "business rule": "Validated rule",
+      "comments": "OK"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefCustomer",
+    "field": "TaxStatus2",
+    "data": {
+      "target table name": "RefCustomer",
+      "target field name": "TaxStatus2",
+      "source table name": "SrcCustomer",
+      "source field name": "TaxStatus",
+      "transformation logic": "",
+      "business rule": "Transformation missing",
+      "comments": "Needs BA input"
+    },
+    "issue_type": "missing_logic",
+    "description": "No transformation logic for RefCustomer.TaxStatus2"
+  },
+  {
+    "table": "RefInvoice",
+    "field": "EntityCode3",
+    "data": {
+      "target table name": "RefInvoice",
+      "target field name": "EntityCode3",
+      "source table name": "SrcTaxEntity",
+      "source field name": "TaxCode",
+      "transformation logic": "UPPER(TRIM(SrcTaxEntity.TaxCode)",
+      "business rule": "Syntax error",
+      "comments": "Check parentheses"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefInvoice",
+    "field": "EntityCode4",
+    "data": {
+      "target table name": "RefInvoice",
+      "target field name": "EntityCode4",
+      "source table name": "SrcCustomer",
+      "source field name": "TaxStatus",
+      "transformation logic": "CASE WHEN SrcCustome.TaxStatus IS NULL THEN 'UNKNOWN' ELSE SrcCustome.TaxStatus END",
+      "business rule": "Typo in source table",
+      "comments": "Check table spelling"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefCustomer",
+    "field": "CustID5",
+    "data": {
+      "target table name": "RefCustomer",
+      "target field name": "CustID5",
+      "source table name": "SrcTaxEntity",
+      "source field name": "TaxCode",
+      "transformation logic": "CASE WHEN SrcTaxEntity.TaxCode>1000 THEN 'HIGH' ELSE 'LOW' END",
+      "business rule": "Threshold logic",
+      "comments": "Complex case"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefAccountTaxes",
+    "field": "EntityCode6",
+    "data": {
+      "target table name": "RefAccountTaxes",
+      "target field name": "EntityCode6",
+      "source table name": "SrcTaxMaster",
+      "source field name": "InvoiceAmt",
+      "transformation logic": "CAST(SrcTaxMaster.InvoiceAmt AS VARCHAR(20))",
+      "business rule": "Potential duplicate",
+      "comments": "Same field appears elsewhere"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefCustomer",
+    "field": "TaxStatus7",
+    "data": {
+      "target table name": "RefCustomer",
+      "target field name": "TaxStatus7",
+      "source table name": "SrcCustomer",
+      "source field name": "InvoiceAmt",
+      "transformation logic": "DROP TABLE RefAccountTaxes",
+      "business rule": "Invalid SQL injection",
+      "comments": "Security test"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefTaxEntity",
+    "field": "TaxStatus8",
+    "data": {
+      "target table name": "RefTaxEntity",
+      "target field name": "TaxStatus8",
+      "source table name": "SrcTaxMaster",
+      "source field name": "CustID",
+      "transformation logic": "LOWER(TRIM(SrcTaxMaster.CustID))",
+      "business rule": "Validated rule",
+      "comments": "OK"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefInvoice",
+    "field": "EntityCode9",
+    "data": {
+      "target table name": "RefInvoice",
+      "target field name": "EntityCode9",
+      "source table name": "SrcTaxEntity",
+      "source field name": "EntityCode",
+      "transformation logic": "CAST(SrcTaxEntity.EntityCode AS VARCHAR(20))",
+      "business rule": "Validated rule",
+      "comments": "OK"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  },
+  {
+    "table": "RefCustomer",
+    "field": "EntityCode10",
+    "data": {
+      "target table name": "RefCustomer",
+      "target field name": "EntityCode10",
+      "source table name": "SrcCustomer",
+      "source field name": "CustID",
+      "transformation logic": "CASE WHEN SrcCustomer.CustID>1000 THEN 'HIGH' ELSE 'LOW' END",
+      "business rule": "Threshold logic",
+      "comments": "Complex case"
+    },
+    "issue_type": "ai_review",
+    "description": "Ready for AI review"
+  }
+]

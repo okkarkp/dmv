@@ -1,0 +1,14 @@
+# Ignore generated, logs, and models
+__pycache__/
+*.log
+/app/logs/
+models/
+outputs/
+uploads/
+sim_data/
+*.xlsx
+*.sql
+*.egg-info/
+*.pyc
+*.pyo
+*.db
