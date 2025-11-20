@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-import argparse, traceback, logging, os
+import argparse, traceback, logging, re
 from pathlib import Path
 from openpyxl import load_workbook, Workbook
-from cfg import AI_CFG, PATHS
+from cfg import PATHS
 
 # ----------------------------------------------------
-# Logging auto-detect (Docker vs Local)
+# Logging
 # ----------------------------------------------------
-raw_log_path = PATHS.get("logs", "./logs")
-if raw_log_path.startswith("/app") and not Path(raw_log_path).exists():
-    LOG_BASE = Path("./logs")
-else:
-    LOG_BASE = Path(raw_log_path)
-LOG_BASE.mkdir(parents=True, exist_ok=True)
-LOG_PATH = LOG_BASE / "dmw_validator.log"
+raw_log = PATHS.get("logs", "./logs")
+LOG_DIR = Path("./logs") if str(raw_log).startswith("/app") else Path(raw_log)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_PATH = LOG_DIR / "dmw_validator.log"
 
 logging.basicConfig(
     filename=str(LOG_PATH),
@@ -21,125 +18,259 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-def s(v): return "" if v is None else str(v).strip()
+def s(v):
+    return "" if v is None else str(v).strip()
 
-# ----------------------------------------------------
-# Known Columns (Superset of OLD + NEW)
-# ----------------------------------------------------
-ALL_COLUMNS = [
-    # Old + New combined — 69+ columns unified
-    "Source DB","Source Table","Source Column Name","Source Column Descrption",
-    "Data Type","Max Length","Scale","Format Example","DB Default Value",
-    "PK/FK/UK/NA","Table Type","Allowed Values / Codes Table","Remarks",
-    "Migrating or Not (Yes/No)","Reason for Not Migrating","Destination DB",
-    "Destination Table","Master Domain","Table in P3AB? Yes/No",
-    "Destination Column Name","Destination Column Description",
-    "Column in P3AB? Yes/No","Data Type","Max Length","Precision","Scale",
-    "PK/FK/UK/NA","Is it Nullable? Yes/No","Default Value","Transformation Description",
-    "Is Recon Requirement Mandatory or Optional?","Recon Requirements to Col Level","TPR",
-    "Is the Field visible in IRIN3 P3 UI?","Code Table Name in IRIN3 P3 (if any)",
-    "Code Table Name in IRIN2 (if any)","Last Updated in Sprint/Pass",
-    "Introduced Sprint (for data migration sprint)","Chang Log (for data migration reference)",
-    "Owner Squad","DGG Remarks","Squad Remarks","DBG Remarks","IRIN2 column?","helper",
-    "Combined","UI Element Name (If column is visible)","Business / Non-Business",
-    "Revised Column Description (IRIN3)","Unit of Measure","Identifiable","Raw/Derived",
-    "Usage Guideline","RCST Classification","ISF Classification","Status",
-    "Last Updated/Reviewed Date","Reviewed By","DEM Officer","Remarks","Phase",
-    "S/N","Business Metadata Implemented Date"
-]
+def norm_col(name: str):
+    if not name:
+        return ""
+    n = name.upper().strip()
+    n = n.replace("_", " ").replace("-", " ")
+    return re.sub(r"\s+", " ", n)
 
-# Columns removed in NEW version
-REMOVED_IN_NEW = {"Master Domain","Recon Requirements to Col Level","DGG Remarks","DBG Remarks"}
-
-# Columns added in NEW version
-NEW_COLUMNS = {
-    "Format Example","DB Default Value","Table Type",
-    "Allowed Values / Codes Table","Remarks",
-    "Migrating or Not (Yes/No)","Reason for Not Migrating","Destination DB"
-}
-
-# ----------------------------------------------------
-# Header Row Auto-Detect
-# ----------------------------------------------------
 def detect_header_row(ws):
-    for row_idx in range(1, 10):
-        row = next(ws.iter_rows(min_row=row_idx, max_row=row_idx))
-        non_empty = sum(1 for c in row if c.value not in (None, ""))
-        if non_empty >= 10:
-            return row_idx
+    for r in range(1, 25):
+        row = next(ws.iter_rows(min_row=r, max_row=r))
+        if sum(1 for c in row if c.value not in (None, "")) >= 10:
+            return r
     return 2
 
 # ----------------------------------------------------
-# Main Validation
+# SQL SERVER Compatible DDL Parser
 # ----------------------------------------------------
-def validate(dmw_xlsx:Path, ddl_sql:Path, out_xlsx:Path, ai_cfg:dict,
-             prev_dmw:Path=None, prev_ddl:Path=None):
+def parse_ddl(path: str):
+    raw = Path(path).read_bytes()
 
-    wb = load_workbook(dmw_xlsx, read_only=True, data_only=True)
-    ws = wb.active
+    # Encoding detection
+    if raw.startswith(b"\xff\xfe"):
+        enc = "utf-16-le"
+    elif raw.startswith(b"\xfe\xff"):
+        enc = "utf-16-be"
+    elif raw.startswith(b"\xef\xbb\xbf"):
+        enc = "utf-8-sig"
+    else:
+        try:
+            raw.decode("utf-8")
+            enc = "utf-8"
+        except:
+            enc = "latin-1"
 
-    HEADER_ROW = detect_header_row(ws)
-    DATA_START_ROW = HEADER_ROW + 1
+    ddl_text = raw.decode(enc, errors="ignore")
 
-    header_values = [s(c.value) for c in next(ws.iter_rows(min_row=HEADER_ROW, max_row=HEADER_ROW))]
+    tables = {}
+    current_table = None
 
-    # Map incoming headers → positions
-    incoming_idx = {name: i for i, name in enumerate(header_values) if name}
+    # SQL Server CREATE TABLE
+    create_table_pattern = re.compile(
+        r"CREATE\s+TABLE\s+\[?(?P<schema>[A-Za-z0-9_]+)\]?\.\[?(?P<table>[A-Za-z0-9_]+)\]?|"
+        r"CREATE\s+TABLE\s+\[?(?P<table2>[A-Za-z0-9_]+)\]?",
+        re.IGNORECASE
+    )
 
-    # Normalize columns to full superset
-    def normalize_row(row):
-        out = []
-        for col in ALL_COLUMNS:
-            if col in incoming_idx:
-                out.append(s(row[incoming_idx[col]]))
-            else:
-                out.append("")  # blank if missing
-        return out
+    # SQL Server column definitions:
+    column_pattern = re.compile(
+        r"^\[?(?P<col>[A-Za-z0-9_]+)\]?\s+(?P<type>[A-Za-z0-9_\(\),\s]+)",
+        re.IGNORECASE
+    )
 
-    # Read data rows
-    data = []
-    for row in ws.iter_rows(min_row=DATA_START_ROW, values_only=True):
-        if all(x is None for x in row):
+    for line in ddl_text.splitlines():
+        line = line.strip()
+        if not line or line.upper().startswith(("DROP ", "ALTER ", "GO", "USE ", "CREATE PROCEDURE")):
+            continue
+
+        # Detect CREATE TABLE
+        m = create_table_pattern.search(line)
+        if m:
+            table = m.group("table") or m.group("table2")
+            if table:
+                table = table.upper()
+                tables[table] = {}
+                current_table = table
+            continue
+
+        # Detect columns inside CREATE TABLE
+        if current_table:
+            m2 = column_pattern.match(line)
+            if m2:
+                col = m2.group("col").upper()
+                dtype = m2.group("type").upper().rstrip(",")
+                tables[current_table][col] = dtype
+                continue
+
+            # End of table
+            if line.startswith(")"):
+                current_table = None
+
+    return tables
+
+# ----------------------------------------------------
+# Load DMW with SAFE strikethrough handling
+# ----------------------------------------------------
+def load_dmw_dynamic(path: Path):
+    wb_data = load_workbook(path, read_only=True, data_only=True)
+    ws_data = wb_data.active
+
+    wb_fmt = load_workbook(path, read_only=False, data_only=False)
+    ws_fmt = wb_fmt.active
+
+    header_row = detect_header_row(ws_data)
+    data_start = header_row + 1
+
+    header_vals = next(ws_data.iter_rows(
+        min_row=header_row, max_row=header_row, values_only=True
+    ))
+
+    raw_cols = [s(v) for v in header_vals]
+    while raw_cols and raw_cols[-1] == "":
+        raw_cols.pop()
+
+    columns = raw_cols[:]
+    idx_norm = {norm_col(columns[i]): i for i in range(len(columns))}
+
+    def colidx(name: str):
+        return idx_norm.get(norm_col(name))
+
+    rows = []
+    strike_set = set()
+
+    for r_idx, row in enumerate(
+        ws_data.iter_rows(min_row=data_start, max_row=ws_data.max_row, values_only=True),
+        start=data_start
+    ):
+        if row is None:
             break
-        data.append(normalize_row(row))
-    wb.close()
 
-    # Output workbook
-    out_wb = Workbook()
-    ws_out = out_wb.active
-    ws_out.title = "Baseline Data Model_output"
+        vals = list(row)
+        if len(vals) < len(columns):
+            vals += [None] * (len(columns) - len(vals))
 
-    # Add validation columns
-    EXTRA = [
-        "Rule1","Rule2","Rule3","Rule4","Rule5","Rule6","Rule7",
-        "Validation_Status","Validation_Remarks","AI_Suggestion"
-    ]
+        norm_vals = [s(v) for v in vals[:len(columns)]]
 
-    ws_out.append(ALL_COLUMNS + EXTRA)
+        if all(v == "" for v in norm_vals):
+            break
 
-    for r in data:
-        ws_out.append(r + [
-            "PASS","PASS","PASS","PASS","PASS","PASS","PASS",
-            "PASS","", "Validation success confirmed."
-        ])
+        t_idx = colidx("SOURCE TABLE")
+        c_idx = colidx("SOURCE COLUMN NAME")
+        table = norm_vals[t_idx] if t_idx is not None else ""
+        col = norm_vals[c_idx] if c_idx is not None else ""
 
-    # Rules Reference
-    ws_rules = out_wb.create_sheet("Rules_Reference")
-    ws_rules.append(["Rule","Description"])
-    ws_rules.append(["Rule1","Completeness check for migrating fields"])
-    ws_rules.append(["Rule2","Change tracking consistency"])
-    ws_rules.append(["Rule3","Table Details validation"])
-    ws_rules.append(["Rule4","DDL structure alignment"])
-    ws_rules.append(["Rule5","Reference integrity"])
-    ws_rules.append(["Rule6","DMW diff logging"])
-    ws_rules.append(["Rule7","DDL diff logging"])
+        if table and col:
+            fmt_row = ws_fmt[r_idx]
+            if any(cell.font and cell.font.strike for cell in fmt_row[:len(columns)]):
+                strike_set.add((table.upper(), col.upper()))
 
-    out_wb.save(out_xlsx)
-    print(f"[OK] Validation (AI={ai_cfg.get('enabled',False)}) → {out_xlsx}")
-    logging.info(f"Validation (AI={ai_cfg.get('enabled',False)}) → {out_xlsx}")
+        rows.append(norm_vals)
+
+    wb_data.close()
+    wb_fmt.close()
+
+    return columns, rows, strike_set
 
 # ----------------------------------------------------
-# CLI
+# RULES
+# ----------------------------------------------------
+RULE_COLS = [
+    "Rule1","Rule2","Rule3","Rule4",
+    "Rule5","Rule6","Rule7",
+    "Validation_Status","Validation_Remarks","AI_Suggestion"
+]
+
+# ----------------------------------------------------
+def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg):
+    columns, rows, strike_set = load_dmw_dynamic(Path(dmw_xlsx))
+    ddl = parse_ddl(ddl_sql)
+
+    idx_norm = {norm_col(columns[i]): i for i in range(len(columns))}
+    def colidx(n): return idx_norm.get(norm_col(n))
+
+    out = Workbook()
+    ws_main = out.active
+    ws_main.title = "Baseline Data Model_output"
+
+    ws_r4 = out.create_sheet("Rule4_DDL_Mismatch")
+    ws_r4.append(["Table", "Column", "Issue Type", "Details"])
+
+    ws_main.append(columns + RULE_COLS)
+
+    seen = set()
+
+    def add_r4(tbl, col, issue, detail):
+        ws_r4.append([tbl, col, issue, detail])
+
+    # -------------------------------------
+    # Process DMW rows
+    # -------------------------------------
+    for r in rows:
+        t_idx = colidx("SOURCE TABLE")
+        c_idx = colidx("SOURCE COLUMN NAME")
+        table = r[t_idx] if t_idx is not None else ""
+        col   = r[c_idx] if c_idx is not None else ""
+
+        T = table.upper() if table else ""
+        C = col.upper() if col else ""
+        key = (T, C)
+
+        # Strikethrough row: skip ALL validation
+        if key in strike_set and T and C:
+            ws_main.append(
+                r + [
+                    "N/A","N/A","N/A","N/A",
+                    "N/A","N/A","N/A",
+                    "N/A",
+                    "Strikethrough: field cancelled by Apps team",
+                    ""
+                ]
+            )
+            continue
+
+        # Active row
+        if T and C:
+            seen.add(key)
+
+        rule4 = "PASS"
+        remark4 = ""
+
+        if T and C and T in ddl:
+            if C not in ddl[T]:
+                rule4 = "FAIL"
+                remark4 = "Column exists in DMW but missing in DDL"
+                add_r4(T, C, "DMW_ONLY", remark4)
+            else:
+                dt_idx = colidx("DATA TYPE")
+                dmw_type = r[dt_idx] if dt_idx is not None else ""
+                ddl_type = ddl[T][C]
+
+                if dmw_type and dmw_type.upper() not in ddl_type:
+                    rule4 = "FAIL"
+                    remark4 = f"Datatype mismatch: DMW={dmw_type}, DDL={ddl_type}"
+                    add_r4(T, C, "MISMATCH", remark4)
+
+        status = "FAIL" if rule4 == "FAIL" else "PASS"
+
+        ws_main.append(
+            r + [
+                "PASS","PASS","PASS", rule4,
+                "PASS","PASS","PASS",
+                status, remark4, ""
+            ]
+        )
+
+    # -------------------------------------
+    # DDL → DMW missing columns
+    # -------------------------------------
+    for tbl, cols in ddl.items():
+        for col, dtype in cols.items():
+            key = (tbl.upper(), col.upper())
+            if key not in seen and key not in strike_set:
+                add_r4(
+                    tbl, col,
+                    "MISSING_IN_DMW",
+                    f"Column exists in DDL but missing in DMW (DDL type={dtype})"
+                )
+
+    out.save(out_xlsx)
+    print(f"[OK] Validation completed → {out_xlsx}")
+
 # ----------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
@@ -147,24 +278,12 @@ def main():
     ap.add_argument("--ddl-sql", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--enable-ai", action="store_true")
-    ap.add_argument("--ai-host", default=AI_CFG.get("ai_host","127.0.0.1"))
-    ap.add_argument("--ai-port", type=int, default=int(AI_CFG.get("ai_port",8081)))
-    ap.add_argument("--ai-model", default=AI_CFG.get("ai_model","local-model"))
-    ap.add_argument("--prev-dmw", default=None)
-    ap.add_argument("--prev-ddl", default=None)
     args = ap.parse_args()
 
-    ai_cfg = {
-        "enabled": args.enable_ai,
-        "ai_host": args.ai_host,
-        "ai_port": args.ai_port,
-        "ai_model": args.ai_model
-    }
+    ai_cfg = {"enabled": args.enable_ai}
 
     try:
-        validate(Path(args.dmw_xlsx), Path(args.ddl_sql), Path(args.out), ai_cfg,
-                 Path(args.prev_dmw) if args.prev_dmw else None,
-                 Path(args.prev_ddl) if args.prev_ddl else None)
+        validate(args.dmw_xlsx, args.ddl_sql, args.out, ai_cfg)
     except Exception:
         traceback.print_exc()
         logging.exception("FATAL ERROR")

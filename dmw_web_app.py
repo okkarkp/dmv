@@ -32,8 +32,7 @@ def summarize_excel(out_path:Path):
                 if val in counts: counts[val]+=1
         wb.close()
         return counts
-    except Exception as e:
-        logging.warning(f"Summary failed: {e}")
+    except:
         return {}
 
 def run_validator(cmd, out_path, generate_flag):
@@ -52,36 +51,137 @@ def run_validator(cmd, out_path, generate_flag):
             subprocess.run(gen_cmd, check=True)
             logging.info("Artifact generation completed.")
     except Exception as e:
-        logging.error("Validator or generation failed: %s", e)
+        logging.error("Validator failed: %s", e)
     logging.info("Run finished in %.1fs", time.time()-start)
 
+# -----------------------------------------------------------
+# 🎨 Modern UI Styling
+# -----------------------------------------------------------
+
+BASE_STYLE = """
+<style>
+body {
+  font-family: Arial, sans-serif; 
+  background-color: #f5f7fa;
+  margin: 0; padding: 30px;
+  color: #333;
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 25px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+.input-row {
+  margin: 10px 0;
+}
+
+input[type=file] {
+  padding: 6px;
+  border-radius: 6px;
+  background: #f1f1f1;
+}
+
+button, input[type=submit] {
+  background: #1971c2;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  margin-top: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+button:hover, input[type=submit]:hover {
+  background: #0b5798;
+}
+
+hr { margin: 40px 0; }
+
+.loader {
+  border: 8px solid #e0e0e0;
+  border-top: 8px solid #228be6;
+  border-radius: 50%;
+  width: 70px; height: 70px;
+  animation: spin 1s linear infinite;
+  margin: auto;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+.small-text { color: #777; font-size: 13px; }
+
+.summary-box {
+  display: inline-block;
+  background: #f1f3f5;
+  padding: 15px;
+  border-radius: 10px;
+  margin: 10px;
+  min-width: 120px;
+  text-align: center;
+}
+.summary-value { font-size: 22px; font-weight: bold; }
+</style>
+"""
+
+# -----------------------------------------------------------
+# 🏠 HOME PAGE
+# -----------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def index():
     return f"""
-    <html><head><title>DMW Validator</title></head>
-    <body style='font-family:Arial; margin:50px'>
-      <h2>📊 Data Mapping Workbook Validator</h2>
-      <form action="/validate" method="post" enctype="multipart/form-data">
-        <p><b>Current Files</b></p>
-        <p>DMW Excel: <input type="file" name="dmw" required></p>
-        <p>DDL SQL: <input type="file" name="ddl" required></p>
+    <html><head><title>DMW Validator</title>{BASE_STYLE}</head>
+    <body>
+      <h1>📊 DMW Validator</h1>
 
-        <p><b>Previous Versions (optional)</b></p>
-        <p>Previous DMW Excel: <input type="file" name="prev_dmw"></p>
-        <p>Previous DDL SQL: <input type="file" name="prev_ddl"></p>
+      <div class='card'>
+        <h2>Upload Files</h2>
+        <form action="/validate" method="post" enctype="multipart/form-data">
 
-        <p><label><input type="checkbox" name="enable_ai" value="1" {"checked" if AI_CFG.get("enabled") else ""}>
-           🧠 Enable AI Suggestions</label></p>
-        <p><label><input type="checkbox" name="generate_artifacts" value="1">
-           🧱 Generate Migration Scripts (DDL / Recon / Insert-Select)</label></p>
+          <div class="input-row"><b>DMW Excel:</b><br>
+            <input type="file" name="dmw" required></div>
 
-        <input type="submit" value="Validate">
-      </form>
-      <hr>
-      <pre>Config: {json.dumps(CFG, indent=2)}</pre>
+          <div class="input-row"><b>DDL SQL:</b><br>
+            <input type="file" name="ddl" required></div>
+
+          <h3>Optional: Previous Versions</h3>
+
+          <div class="input-row">Previous DMW Excel:<br>
+            <input type="file" name="prev_dmw"></div>
+
+          <div class="input-row">Previous DDL SQL:<br>
+            <input type="file" name="prev_ddl"></div>
+
+          <div class="input-row">
+            <label><input type="checkbox" name="enable_ai" value="1">  
+            🧠 Enable AI Suggestions</label>
+          </div>
+
+          <div class="input-row">
+            <label><input type="checkbox" name="generate_artifacts" value="1">  
+            🧱 Generate Migration Scripts</label>
+          </div>
+
+          <input type="submit" value="Run Validation">
+        </form>
+      </div>
+
+      <div class="card small-text">
+        <b>System Config</b>
+        <pre>{json.dumps(CFG, indent=2)}</pre>
+      </div>
     </body></html>
     """
 
+# -----------------------------------------------------------
+# ⏳ PROGRESS PAGE
+# -----------------------------------------------------------
 @app.post("/validate", response_class=HTMLResponse)
 async def validate_files(
     background_tasks: BackgroundTasks,
@@ -96,6 +196,7 @@ async def validate_files(
     ddl_path = save_upload(ddl)
     prev_dmw_path = save_upload(prev_dmw) if prev_dmw else None
     prev_ddl_path = save_upload(prev_ddl) if prev_ddl else None
+
     out_path = OUTPUT_DIR / f"{dmw_path.stem}_validated.xlsx"
 
     cmd = [
@@ -105,74 +206,86 @@ async def validate_files(
         "--out", str(out_path)
     ]
 
-    # Only include prev files if they exist and are valid
-    if prev_dmw_path and prev_dmw_path.suffix.lower() == ".xlsx":
+    if prev_dmw_path and prev_dmw_path.suffix.lower()==".xlsx":
         cmd += ["--prev-dmw", str(prev_dmw_path)]
-    if prev_ddl_path and prev_ddl_path.suffix.lower() == ".sql":
+    if prev_ddl_path and prev_ddl_path.suffix.lower()==".sql":
         cmd += ["--prev-ddl", str(prev_ddl_path)]
-
-    if enable_ai == "1":
-        cmd += ["--enable-ai",
-                "--ai-host", AI_CFG.get("ai_host","127.0.0.1"),
-                "--ai-port", str(AI_CFG.get("ai_port",8081)),
-                "--ai-model", AI_CFG.get("ai_model","local-model")]
+    if enable_ai=="1":
+        cmd += ["--enable-ai"]
 
     background_tasks.add_task(run_validator, cmd, out_path, generate_artifacts=="1")
 
     return f"""
-    <html><head>
-      <meta http-equiv='refresh' content='6;url=/result?file={out_path.name}'>
-      <style>
-        .loader {{border:8px solid #f3f3f3;border-top:8px solid #3498db;border-radius:50%;width:60px;height:60px;animation:spin 1s linear infinite}}
-        @keyframes spin {{0% {{transform: rotate(0deg)}}100% {{transform: rotate(360deg)}}}}
-      </style>
-    </head>
-    <body style='font-family:Arial; margin:50px; text-align:center'>
-      <div class='loader' style='margin:auto'></div>
-      <h3>Validation in progress...</h3>
-      <p>⏳ This page refreshes every 6 seconds.</p>
-      <p>AI: {"🧠 Enabled" if enable_ai=="1" else "⚙️ Disabled"} |
-         Generate Artifacts: {"🧱 Yes" if generate_artifacts=="1" else "❌ No"}</p>
-      <p><i>Logs: {LOG_PATH}</i></p>
+    <html><head><meta http-equiv='refresh' content='6;url=/result?file={out_path.name}'>{BASE_STYLE}</head>
+    <body style="text-align:center">
+      <div class="card" style="max-width:500px;margin:auto;">
+        <div class="loader"></div>
+        <h2>Validation in progress...</h2>
+        <p class="small-text">This page refreshes every 6 seconds</p>
+        <p>AI: {"🧠 Enabled" if enable_ai=="1" else "⚙️ Disabled"} |
+           Artifacts: {"🧱 Yes" if generate_artifacts=="1" else "❌ No"}</p>
+      </div>
     </body></html>
     """
 
+# -----------------------------------------------------------
+# ✅ RESULT PAGE
+# -----------------------------------------------------------
 @app.get("/result", response_class=HTMLResponse)
 def result(file:str):
-    import os
     out_path = OUTPUT_DIR / file
     gen_dir = OUTPUT_DIR / "generated"
 
-    if not out_path.exists() or os.path.getsize(out_path) < 1024:
+    # Still processing?
+    if not out_path.exists() or os.path.getsize(out_path) < 1500:
         tail = ""
-        try:
-            tail = "\n".join(Path(LOG_PATH).read_text().splitlines()[-8:])
-        except Exception:
-            tail = "(no recent logs)"
+        try: tail = "\n".join(Path(LOG_PATH).read_text().splitlines()[-8:])
+        except: tail = "(no logs)"
+
         return f"""
-        <html><head><meta http-equiv='refresh' content='6'></head>
-        <body style='font-family:Arial;margin:50px;text-align:center'>
-        <div style='border:8px solid #f3f3f3;border-top:8px solid #3498db;border-radius:50%;width:60px;height:60px;margin:auto;animation:spin 1s linear infinite'></div>
-        <h3>⏳ Still processing...</h3>
-        <p>Refreshes every 6 seconds until validation completes.</p>
-        <pre>{tail}</pre>
+        <html><head><meta http-equiv='refresh' content='6'>{BASE_STYLE}</head>
+        <body style="text-align:center">
+          <div class="card" style="max-width:500px;margin:auto;">
+            <div class="loader"></div>
+            <h2>Still processing...</h2>
+            <pre class="small-text">{tail}</pre>
+          </div>
         </body></html>
         """
 
     counts = summarize_excel(out_path)
+
+    # Summary badges
+    summary_html = "".join([
+        f"<div class='summary-box'><div class='summary-value'>{counts.get(k,0)}</div>{k}</div>"
+        for k in ["PASS","FAIL","INFO"]
+    ])
+
     generated_files = "".join(
         [f"<li><a href='/download?file=generated/{p.name}'>{p.name}</a></li>"
          for p in gen_dir.glob('*.sql')]
-    ) if gen_dir.exists() else "<i>No generated SQL files</i>"
+    ) if gen_dir.exists() else "<i>No SQL generated.</i>"
 
     return f"""
-    <html><body style='font-family:Arial;margin:50px'>
-      <h2>✅ Validation Completed</h2>
-      <p><b>Summary:</b> {json.dumps(counts)}</p>
-      <p><a href='/download?file={out_path.name}'>⬇️ Download validated Excel</a></p>
-      <h3>🧱 Generated Migration Scripts</h3>
-      <ul>{generated_files}</ul>
-      <hr><pre>{Path(LOG_PATH).read_text()[-600:]}</pre>
+    <html><head>{BASE_STYLE}</head>
+    <body>
+      <h1>✅ Validation Completed</h1>
+
+      <div class="card">
+        <h2>Summary</h2>
+        {summary_html}
+        <p><a href='/download?file={out_path.name}'><button>⬇ Download Validated Excel</button></a></p>
+      </div>
+
+      <div class="card">
+        <h2>🧱 Migration Scripts</h2>
+        <ul>{generated_files}</ul>
+      </div>
+
+      <div class="card small-text">
+        <h3>Recent Logs</h3>
+        <pre>{Path(LOG_PATH).read_text()[-800:]}</pre>
+      </div>
     </body></html>
     """
 
