@@ -264,10 +264,23 @@ def parse_ddl(path: str) -> Dict[str, Dict[str, Dict[str, str]]]:
             m2 = col_re.match(l)
             if not m2:
                 continue
-
+            # ❌ skip constraints & non-columns explicitly
+            if up.startswith((
+                "CONSTRAINT",
+                "PRIMARY KEY",
+                "FOREIGN KEY",
+                "CHECK",
+                "UNIQUE",
+                "INDEX",
+                "PERIOD FOR SYSTEM_TIME",
+                "WITH"
+            )):
+                continue
             c = s(m2.group("col")).upper()
             t = s(m2.group("type")).upper()
             rest = s(m2.group("rest")).upper()
+            if " AS " in up:
+                continue
 
             nullable = ""
             if "NOT NULL" in rest:
