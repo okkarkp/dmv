@@ -635,49 +635,82 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
 
     wb_data.close()
 
-    # ------------------------------------------------
-    # Rule3: Table Details vs Baseline Data Model
-    # ------------------------------------------------
     try:
-        wb_td = load_workbook(dmw_xlsx, read_only=True, data_only=True)
-        ws_td = None
-        for sn in wb_td.sheetnames:
-            if norm_col(sn) == norm_col("TABLE DETAILS"):
-                ws_td = wb_td[sn]
-                break
+            wb_td = load_workbook(dmw_xlsx, read_only=True, data_only=True)
+            ws_td = None
 
-        table_details_set: Set[str] = set()
-        if ws_td is not None:
-            hr = detect_header_row_flexible(ws_td, min_non_empty=1, max_scan=10, default_row=1)
-            tcols, tlookup = build_header_index(ws_td, hr)
-            start = hr + 1
+            for sn in wb_td.sheetnames:
+                if norm_col(sn) == norm_col("TABLE DETAILS"):
+                    ws_td = wb_td[sn]
+                    break
 
-            # Prefer explicit columns; fall back to any header containing TABLE
-            table_i = resolve_col(tlookup, "Table Name") or resolve_col(tlookup, "Destination Table")
-            if table_i is None:
-                for k, idx_i in tlookup.items():
-                    if "TABLE" in k:
-                        table_i = idx_i[0]
-                        break
+            table_details_set: Set[str] = set()
 
-            if table_i is not None:
-                for r in ws_td.iter_rows(min_row=start, max_row=ws_td.max_row, values_only=True):
-                    if r is None:
-                        break
-                    vals = [s(v) for v in r[:len(tcols)]]
-                    if all(v == "" for v in vals):
-                        break
-                    tname = vals[table_i] if table_i < len(vals) else ""
-                    if not is_na(tname):
-                        table_details_set.add(s(tname).upper())
+            if ws_td is not None:
+                hr = detect_header_row_flexible(
+                    ws_td,
+                    min_non_empty=1,
+                    max_scan=10,
+                    default_row=1
+                )
+                tcols, tlookup = build_header_index(ws_td, hr)
+                start = hr + 1
 
-        missing_tables = sorted(table_details_set - baseline_tables)
-        for t in missing_tables:
-            ws_r3.append([t, "MISSING_IN_BASELINE", "Table is listed in Table Details but not found in Baseline Data Model"])
+                table_i = (
+                    resolve_col(tlookup, "Table Name")
+                    or resolve_col(tlookup, "Destination Table")
+                )
 
-        wb_td.close()
+                if table_i is None:
+                    for k, idxs in tlookup.items():
+                        if "TABLE" in k:
+                            table_i = idxs[0]
+                            break
+
+                if table_i is not None:
+                    for r in ws_td.iter_rows(
+                        min_row=start,
+                        max_row=ws_td.max_row,
+                        values_only=True
+                    ):
+                        if not r:
+                            break
+
+                        vals = [s(v) for v in r[:len(tcols)]]
+                        if all(v == "" for v in vals):
+                            break
+
+                        tname = vals[table_i] if table_i < len(vals) else ""
+                        if not is_na(tname):
+                            table_details_set.add(s(tname).upper())
+
+            # ------------------------------------------------
+            # A️⃣ Baseline → Table Details missing
+            # ------------------------------------------------
+            for t in sorted(baseline_tables - table_details_set):
+                ws_r3.append([
+                    t,
+                    "MISSING_IN_TABLE_DETAILS",
+                    "Destination table used in Baseline Data Model but not found in Table Details sheet"
+                ])
+
+            # ------------------------------------------------
+            # B️⃣ Table Details → Baseline unused
+            # ------------------------------------------------
+            for t in sorted(table_details_set - baseline_tables):
+                ws_r3.append([
+                    t,
+                    "UNUSED_IN_BASELINE",
+                    "Table listed in Table Details but not used in Baseline Data Model"
+                ])
+
+            wb_td.close()
+
     except Exception:
         logging.exception("Rule3 processing failed")
+
+
+        
 
     # ------------------------------------------------
     # Rule4: DDL alignment (Rule4A + Rule4B)
