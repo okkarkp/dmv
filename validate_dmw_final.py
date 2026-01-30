@@ -634,7 +634,9 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
         }
 
     wb_data.close()
-
+    # ------------------------------------------------
+    # Rule3: Baseline Data Model vs Table Details
+    # ------------------------------------------------
     try:
             wb_td = load_workbook(dmw_xlsx, read_only=True, data_only=True)
             ws_td = None
