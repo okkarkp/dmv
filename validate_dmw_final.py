@@ -635,13 +635,8 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
 
     wb_data.close()
     # ------------------------------------------------
-    # Rule3: Baseline Data Model vs Table Details
-    # ------------------------------------------------
-    # Rule3 semantics:
-    # - FAIL if Baseline uses a destination table not listed in Table Details
-    # - FAIL if Table Details lists a table not used in Baseline
-    # - Bidirectional consistency check
-
+# Rule3: Baseline Data Model vs Table Details
+# ------------------------------------------------
     # ------------------------------------------------
 # Rule3: Baseline Data Model vs Table Details
 # ------------------------------------------------
@@ -649,6 +644,7 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
         wb_td = load_workbook(dmw_xlsx, read_only=True, data_only=True)
         ws_td = None
 
+        # Locate "Table Details" sheet (robust match)
         for sn in wb_td.sheetnames:
             if norm_col(sn) == norm_col("TABLE DETAILS"):
                 ws_td = wb_td[sn]
@@ -666,6 +662,7 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
             tcols, tlookup = build_header_index(ws_td, hr)
             start = hr + 1
 
+            # Resolve table name column safely
             table_i = (
                 resolve_col(tlookup, "Table Name")
                 or resolve_col(tlookup, "Destination Table")
@@ -697,7 +694,9 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
         # ------------------------------------------------
         # A️⃣ Baseline → Table Details missing
         # ------------------------------------------------
-        for t in sorted(baseline_tables - table_details_set):
+        rule3_missing_tables = sorted(baseline_tables - table_details_set)
+
+        for t in rule3_missing_tables:
             ws_r3.append([
                 t,
                 "MISSING_IN_TABLE_DETAILS",
@@ -707,7 +706,9 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
         # ------------------------------------------------
         # B️⃣ Table Details → Baseline unused
         # ------------------------------------------------
-        for t in sorted(table_details_set - baseline_tables):
+        rule3_unused_tables = sorted(table_details_set - baseline_tables)
+
+        for t in rule3_unused_tables:
             ws_r3.append([
                 t,
                 "UNUSED_IN_BASELINE",
@@ -719,8 +720,6 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
     except Exception:
         logging.exception("Rule3 processing failed")
 
-
-        
 
     # ------------------------------------------------
     # Rule4: DDL alignment (Rule4A + Rule4B)
@@ -900,9 +899,21 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
         key = (tblU, DC.upper())
 
         # Rule3: fail rows that have a destination table if table details mismatch exists
-        if rule3_has_issues and not is_na(DT):
-            r3 = "INFO"
-            remarks = (remarks + " | " if remarks else "") + "Rule3 table mismatch – see Rule3_Table_Mismatch"
+       # if rule3_has_issues and not is_na(DT):
+        #    r3 = "INFO"
+         #   remarks = (remarks + " | " if remarks else "") + "Rule3 table mismatch – see Rule3_Table_Mismatch"
+
+        rule3_fail_tables = {row[0] for row in ws_r3.iter_rows(min_row=2, values_only=True)}
+
+        # later, per row
+        if tblU in rule3_fail_tables:
+            r3 = "FAIL"
+            status = "FAIL"
+            remarks = (remarks + " | " if remarks else "") + \
+                    "Rule3 mismatch – see Rule3_Table_Mismatch"
+        else:
+            r3 = "PASS"
+
 
                 # Rule4: exact mismatch OR table-level escalation if table has any Rule4 issues
         if r4 != "N/A":
