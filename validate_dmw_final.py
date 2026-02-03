@@ -743,70 +743,78 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
     # ------------------------------------------------
     # Rule4: DDL alignment (Rule4A + Rule4B)
     # ------------------------------------------------
-    mismatch_keys: Set[Tuple[str, str]] = set()
-    table_has_rule4_issue: Set[str] = set()
-    missing_in_dmw: List[Tuple[str, str, str]] = []
+ 
+    from parse_ddl_v2 import parse_ddl_v2
+
+    ddl_curr = parse_ddl_v2(ddl_sql)
+
+    mismatch_keys = set()
+    table_has_rule4_issue = set()
+    missing_in_dmw = []
 
     for tbl, ddl_cols in ddl_curr.items():
-        tblU = s(tbl).upper()
+        tblU = tbl.upper()
         ddl_set = set(ddl_cols.keys())
         dmw_set = dest_map.get(tblU, set())
 
-        # --------------------------------------------
-        # Rule4A: DMW_ONLY (DMW → DDL)
-        # --------------------------------------------
+        # ------------------------------------------------
+        # DMW_ONLY (exists in DMW, not in DDL)
+        # ------------------------------------------------
         for col in sorted(dmw_set - ddl_set):
             ws_r4.append([
                 tblU,
                 col,
                 "DMW_ONLY",
-                "Destination column exists in DMW but not in DDL"
+                "Destination column appears in DMW but not in DDL"
             ])
             mismatch_keys.add((tblU, col))
             table_has_rule4_issue.add(tblU)
 
-        # --------------------------------------------
-        # Rule4B: Attribute mismatch
-        # --------------------------------------------
+        # ------------------------------------------------
+        # Type / Nullable mismatches
+        # ------------------------------------------------
         for col in sorted(dmw_set & ddl_set):
-            ddl_type = (ddl_cols[col].get("type") or "").upper()
-            ddl_null = (ddl_cols[col].get("nullable") or "").upper()
-            dmw_type = (dmw_defs.get((tblU, col), {}).get("type") or "").upper()
-            dmw_null = (dmw_defs.get((tblU, col), {}).get("nullable") or "").upper()
+            ddl_def = ddl_cols.get(col, {})
+            dmw_def = dmw_defs.get((tblU, col), {})
 
-            if dmw_type and ddl_type and not type_compatible(dmw_type, ddl_type):
+            ddl_type = ddl_def.get("type", "")
+            dmw_type = dmw_def.get("type", "")
+
+            ddl_null = ddl_def.get("nullable", "")
+            dmw_null = dmw_def.get("nullable", "")
+
+            if ddl_type and dmw_type and not type_compatible(dmw_type, ddl_type):
                 ws_r4.append([
                     tblU,
                     col,
                     "TYPE_MISMATCH",
-                    f"DMW={dmw_type} vs DDL={ddl_type}"
+                    f"DMW type={dmw_type} vs DDL type={ddl_type}"
                 ])
                 mismatch_keys.add((tblU, col))
                 table_has_rule4_issue.add(tblU)
 
-            if dmw_null and ddl_null and dmw_null != ddl_null:
+            if ddl_null and dmw_null and ddl_null != dmw_null:
                 ws_r4.append([
                     tblU,
                     col,
                     "NULLABLE_MISMATCH",
-                    f"DMW={dmw_null} vs DDL={ddl_null}"
+                    f"DMW nullable={dmw_null} vs DDL nullable={ddl_null}"
                 ])
                 mismatch_keys.add((tblU, col))
                 table_has_rule4_issue.add(tblU)
 
-        # --------------------------------------------
-        # Rule4C: MISSING_IN_DMW (DDL → DMW)
-        # --------------------------------------------
+        # ------------------------------------------------
+        # MISSING_IN_DMW (exists in DDL, not in DMW)
+        # ------------------------------------------------
         if dmw_set:
             for col in sorted(ddl_set - dmw_set):
-                details = f"Column exists in DDL but not mapped in DMW (DDL type={ddl_cols[col].get('type','')})"
                 ws_r4.append([
                     tblU,
                     col,
                     "MISSING_IN_DMW",
-                    details
+                    "Column exists in DDL but not mapped in DMW"
                 ])
-                missing_in_dmw.append((tblU, col, details))
+                missing_in_dmw.append((tblU, col))
                 table_has_rule4_issue.add(tblU)
 
     # ------------------------------------------------
