@@ -2,8 +2,20 @@
 import json, time, subprocess, argparse, yaml
 from pathlib import Path
 
+def _cfg_max_tokens(key: str, fallback: int) -> int:
+    """Read max_tokens from centralised config; fall back to supplied default."""
+    try:
+        import importlib.resources as pkg_resources
+        import dmw_validator
+        with pkg_resources.open_text(dmw_validator, "config.json") as f:
+            cfg = json.load(f)
+        return int(cfg.get("max_tokens", {}).get(key, fallback))
+    except Exception:
+        return fallback
+
 def run_llama(prompt, model):
-    cmd=["llama-cli","--model",model,"--prompt",prompt,"--n-predict","64","--temp","0.2"]
+    n_predict = str(_cfg_max_tokens("assess", 1024))
+    cmd=["llama-cli","--model",model,"--prompt",prompt,"--n-predict",n_predict,"--temp","0.2"]
     try:
         r=subprocess.run(cmd,capture_output=True,text=True,timeout=20)
         return r.stdout.strip()
