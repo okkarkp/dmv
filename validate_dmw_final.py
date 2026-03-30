@@ -496,7 +496,7 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
     #ddl_curr = parse_ddl(ddl_sql)
     from parse_ddl_v2 import parse_ddl_v2
     ddl_curr = parse_ddl_v2(ddl_sql)
-    ddl_prev = parse_ddl(prev_ddl) if prev_ddl else None
+    ddl_prev = parse_ddl(prev_ddl) if prev_ddl else None  
 
     prev_keys_by_table = load_dmw_dest_keys(prev_dmw) if prev_dmw else None
     prev_defs = load_dmw_dest_defs(prev_dmw) if prev_dmw else None
@@ -747,6 +747,7 @@ def validate(dmw_xlsx, ddl_sql, out_xlsx, ai_cfg, prev_dmw=None, prev_ddl=None, 
     from parse_ddl_v2 import parse_ddl_v2
 
     ddl_curr = parse_ddl_v2(ddl_sql)
+    #ddl_curr = parse_ddl(ddl_sql) 
 
     mismatch_keys = set()
     table_has_rule4_issue = set()
