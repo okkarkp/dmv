@@ -95,16 +95,19 @@ async def upload(
 
     files = sorted([f.name for f in job_dir.iterdir() if f.is_file()])
 
+    
     return templates.TemplateResponse(
-        "result.html",
-        {
-            "request": request,
-            "job_id": job_id,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "files": files,
-        }
+    "result.html",
+    request=request,
+    context={
+        "request": request,
+        "job_id": job_id,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "files": files,
+    }
     )
+
 
 # --------------------------------------------------
 # Download
