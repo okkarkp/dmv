@@ -7,6 +7,10 @@ import dmw_validator
 with pkg_resources.open_text(dmw_validator, "config.json") as f:
     CFG = json.load(f)
 
+def _cfg_max_tokens(key: str, fallback: int) -> int:
+    """Read max_tokens from centralised config; fall back to supplied default."""
+    return int(CFG.get("max_tokens", {}).get(key, fallback))
+
 def load_llm(model_choice="light"):
     """Dynamically load Tiny or Light model with optimized parameters."""
     model_path = CFG["models"].get(model_choice, CFG["models"]["light"])
@@ -84,7 +88,7 @@ def _run_batch(batch, offset=0, focus="", llm=None, prompt_profile="business"):
 
     user_msg = {"role": "user", "content": f"{focus}\nAnalyse these mappings:\n{rows_text}"}
 
-    resp = llm.create_chat_completion(messages=[system_msg, user_msg], max_tokens=256)
+    resp = llm.create_chat_completion(messages=[system_msg, user_msg], max_tokens=_cfg_max_tokens("batch_review", 2048))
     text = resp["choices"][0]["message"]["content"]
     parsed = _safe_json_parse(text)
     if len(parsed) < len(batch):

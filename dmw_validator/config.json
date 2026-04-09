@@ -5,6 +5,15 @@
   },
   "default_model": "light",
 
+  "max_tokens": {
+    "code_gen":    2048,
+    "spec2code":   4096,
+    "code2spec":   2048,
+    "assess":      1024,
+    "ok_code":     1024,
+    "batch_review": 2048
+  },
+
   "critical_columns": [
     "Target Table Name",
     "Target Field Name",

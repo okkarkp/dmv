@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, traceback, re
+import argparse, traceback, re, json
 from pathlib import Path
 from openpyxl import load_workbook
 from llama_cpp import Llama
@@ -7,11 +7,22 @@ from llama_cpp import Llama
 def s(v): return "" if v is None else str(v).strip()
 def up(v): return s(v).upper()
 
+def _cfg_max_tokens(key: str, fallback: int) -> int:
+    """Read max_tokens from centralised config; fall back to supplied default."""
+    try:
+        import importlib.resources as pkg_resources
+        import dmw_validator
+        with pkg_resources.open_text(dmw_validator, "config.json") as f:
+            cfg = json.load(f)
+        return int(cfg.get("max_tokens", {}).get(key, fallback))
+    except Exception:
+        return fallback
+
 def ai_comment(prompt, ai_cfg):
     if not ai_cfg.get("enabled"): return ""
     try:
         from requests import post
-        payload = {"prompt": prompt, "max_tokens": 60}
+        payload = {"prompt": prompt, "max_tokens": _cfg_max_tokens("code_gen", 2048)}
         url = "http://127.0.0.1:8080/v1/completions"
         j = post(url, json=payload, timeout=20).json()
         if "choices" in j: return "-- AI: " + j["choices"][0]["text"].strip()

@@ -34,8 +34,22 @@ def try_math(prompt:str):
     except: return None
 # ----------------------------------------------------
 
+def _cfg_max_tokens(key: str, fallback: int) -> int:
+    """Read max_tokens from centralised config; fall back to supplied default."""
+    try:
+        import importlib.resources as pkg_resources
+        import json as _json
+        import dmw_validator
+        with pkg_resources.open_text(dmw_validator, "config.json") as f:
+            cfg = _json.load(f)
+        return int(cfg.get("max_tokens", {}).get(key, fallback))
+    except Exception:
+        return fallback
+
 SYS_PREAMBLE = "You are a concise assistant. Return only the answer, no explanation."
-def llm_complete(prompt:str,max_tokens=80):
+def llm_complete(prompt:str, max_tokens:int=None):
+    if max_tokens is None:
+        max_tokens = _cfg_max_tokens("ok_code", 1024)
     out = llm(f"{SYS_PREAMBLE}\nQ:{prompt}\nA:", max_tokens=max_tokens,
               temperature=0.2, top_p=0.9, stop=["</s>","\nQ:"])
     return out["choices"][0]["text"].strip()
